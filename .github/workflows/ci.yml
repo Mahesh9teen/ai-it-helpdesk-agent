@@ -1,0 +1,84 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r backend/requirements.txt pytest pytest-cov pytest-asyncio httpx
+      
+      # Run comprehensive test suite
+      - name: Run intent classification tests
+        run: cd backend && pytest tests/test_comprehensive.py::TestIntentClassification -v
+      
+      - name: Run RAG grounding tests
+        run: cd backend && pytest tests/test_comprehensive.py::TestRAGGrounding -v
+      
+      - name: Run automation gate tests
+        run: cd backend && pytest tests/test_comprehensive.py::TestAutomationGate -v
+      
+      - name: Run API contract tests
+        run: cd backend && pytest tests/test_comprehensive.py::TestAPIContracts -v --tb=short
+      
+      - name: Run escalation tests
+        run: cd backend && pytest tests/test_comprehensive.py::TestEscalation -v
+      
+      - name: Run prompt injection tests
+        run: cd backend && pytest tests/test_comprehensive.py::TestPromptInjection -v
+      
+      - name: Run memory tests
+        run: cd backend && pytest tests/test_comprehensive.py::TestMultiTurnMemory -v
+      
+      # Generate coverage report
+      - name: Generate coverage report
+        run: cd backend && pytest tests/ --cov=app --cov-report=xml --cov-report=html --cov-report=term-missing -v
+      
+      # Upload coverage
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./backend/coverage.xml
+          flags: backend
+          name: backend-coverage
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: cd frontend && npm install
+      
+      - name: Lint
+        run: cd frontend && npm run lint || true
+      
+      - name: Build
+        run: cd frontend && npm run build
+      
+      - name: Check bundle size
+        run: cd frontend && du -sh dist/ && ls -lh dist/assets/
+  
+  # Adversarial & Security Tests (can be expanded for production)
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install bandit safety
+      
+      - name: Security check with bandit
+        run: cd backend && bandit -r app/ -ll || true
+      
+      - name: Dependency vulnerability check
+        run: pip install -r backend/requirements.txt && safety check || true

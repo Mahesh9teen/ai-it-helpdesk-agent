@@ -1,0 +1,17 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run backend RAG tests",
+			"type": "shell",
+			"command": "\"C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe\" compose -f docker-compose.yml exec backend pytest tests/test_rag.py -q",
+			"isBackground": false
+		},
+		{
+			"label": "rag-tests-temp",
+			"type": "shell",
+			"command": "docker compose -f docker-compose.yml exec backend pytest tests/test_rag.py -q",
+			"isBackground": false
+		}
+	]
+}
