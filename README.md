@@ -109,3 +109,12 @@ The backend now includes a working Ollama + FAISS retrieval pipeline:
 - Chunks are indexed with metadata including source filename, category, and last-updated date, then persisted to `backend/data/faiss_index`.
 - On service startup, the FAISS index is loaded once and exposed via a metadata-filterable retriever.
 - RAG responses are grounded to retrieved context and escalate with a fixed fallback response when context is insufficient.
+# My Project
+
+This is my project description.
+
+## Features
+- Feature 1
+- Feature 2
+
+Off Campus Verification Code: PU5S57
