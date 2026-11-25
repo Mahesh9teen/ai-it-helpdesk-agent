@@ -163,51 +163,39 @@ class TestRAGGrounding:
     @pytest.mark.parametrize("question,description", IN_SCOPE_QUESTIONS)
     def test_rag_grounding_in_scope(self, question, description):
         """Test that in-scope questions return grounded answers with citations."""
-        with patch('app.rag.retriever.retrieve_context') as mock_retrieve:
-            mock_retrieve.return_value = {
-                'context': 'Remote work is allowed 3 days per week',
-                'sources': ['HR_Policy_2024.pdf', 'Remote_Work_Guidelines.md']
-            }
-            
-            with patch('app.agent.orchestrator.orchestrator') as mock_orchestrator:
-                mock_result = MagicMock()
-                mock_result.response = "Remote work is allowed 3 days per week (source: HR_Policy_2024.pdf)"
-                mock_result.has_source_citation = True
-                mock_orchestrator.process_message.return_value = mock_result
-                
-                result = mock_orchestrator.process_message(
-                    session_id="test_session",
-                    message=question,
-                    employee_id="test_employee"
-                )
-                
-                assert result.has_source_citation
-                assert "source:" in result.response.lower()
-    
+        with patch('app.agent.orchestrator.orchestrator') as mock_orchestrator:
+            mock_result = MagicMock()
+            mock_result.response = "Remote work is allowed 3 days per week (source: HR_Policy_2024.pdf)"
+            mock_result.has_source_citation = True
+            mock_orchestrator.process_message.return_value = mock_result
+
+            result = mock_orchestrator.process_message(
+                session_id="test_session",
+                message=question,
+                employee_id="test_employee"
+            )
+
+            assert result.has_source_citation
+            assert "source:" in result.response.lower()
+
     @pytest.mark.parametrize("question,description", OUT_OF_SCOPE_QUESTIONS)
     def test_rag_grounding_out_of_scope(self, question, description):
         """Test that out-of-scope questions trigger refusal."""
-        with patch('app.rag.retriever.retrieve_context') as mock_retrieve:
-            mock_retrieve.return_value = {
-                'context': None,
-                'sources': []
-            }
-            
-            with patch('app.agent.orchestrator.orchestrator') as mock_orchestrator:
-                mock_result = MagicMock()
-                mock_result.response = "I don't have information about that in the knowledge base. Please contact HR or IT for help."
-                mock_result.has_source_citation = False
-                mock_orchestrator.process_message.return_value = mock_result
-                
-                result = mock_orchestrator.process_message(
-                    session_id="test_session",
-                    message=question,
-                    employee_id="test_employee"
-                )
-                
-                # Should NOT confidently answer or cite sources
-                assert not result.has_source_citation
-                assert "don't have" in result.response.lower() or "not in knowledge base" in result.response.lower()
+        with patch('app.agent.orchestrator.orchestrator') as mock_orchestrator:
+            mock_result = MagicMock()
+            mock_result.response = "I don't have information about that in the knowledge base. Please contact HR or IT for help."
+            mock_result.has_source_citation = False
+            mock_orchestrator.process_message.return_value = mock_result
+
+            result = mock_orchestrator.process_message(
+                session_id="test_session",
+                message=question,
+                employee_id="test_employee"
+            )
+
+            # Should NOT confidently answer or cite sources
+            assert not result.has_source_citation
+            assert "don't have" in result.response.lower() or "not in knowledge base" in result.response.lower()
 
 
 # ============================================================================
@@ -240,7 +228,7 @@ class TestAutomationGate:
                 )
                 
                 # Verify that executing the action creates an approval record
-                approval_record = mock_approval()
+                approval_record = await mock_approval()
                 
                 assert approval_record.status == "pending"
                 assert approval_record.id is not None
@@ -336,7 +324,7 @@ class TestEscalation:
                 reason="user_request"
             )
             
-            escalation = mock_escalation()
+            escalation = await mock_escalation()
             
             assert escalation.status == "escalated"
             assert escalation.reason == "user_request"
@@ -377,7 +365,7 @@ class TestEscalation:
             )
             mock_create.return_value = ticket
             
-            result = mock_create()
+            result = await mock_create()
             
             assert result.priority == "critical"
             assert result.status == "escalated"
@@ -417,24 +405,23 @@ class TestPromptInjection:
             assert result.executed_injected_instruction is False
             assert result.follows_system_prompt is True
     
-    def test_no_private_data_leakage(self):
+    @pytest.mark.asyncio
+    async def test_no_private_data_leakage(self):
         """Test that employee private data is not leaked."""
-        with patch('app.services.employee_service.get_employee_private_data') as mock_get:
+        with patch('app.services.employee_service.get_employee_by_id') as mock_get:
             # Mock should never return private data for unauthorized requests
             mock_get.side_effect = Exception("Unauthorized")
             
             with pytest.raises(Exception):
-                mock_get()
-    
+                await mock_get(employee_id=uuid4())
+
     def test_approval_gate_cannot_be_bypassed(self):
         """Test that approval gate cannot be bypassed with social engineering."""
-        with patch('app.agent.automation_matrix.should_require_approval') as mock_check:
-            mock_check.return_value = True  # Always true for high-risk actions
-            
-            # Even with "my manager approved this" in the message,
-            # approval should still be required
-            requires_approval = mock_check()
-            assert requires_approval is True
+        from app.agent.automation_matrix import TaskType, get_automation_policy
+
+        # Even with "my manager approved this" in the message, approval remains required.
+        policy = get_automation_policy(TaskType.MANAGE_ACCESS_PERMISSIONS)
+        assert policy.requires_approval is True
 
 
 # ============================================================================
@@ -447,45 +434,36 @@ class TestMultiTurnMemory:
     @pytest.mark.asyncio
     async def test_context_preserved_across_turns(self):
         """Test that Turn 2 updates the same ticket from Turn 1."""
+        from app.agent.memory import MemoryTurn, conversation_memory
+
         session_id = str(uuid4())
-        
-        with patch('app.services.chat_service.store_message') as mock_store:
-            mock_store.return_value = MagicMock(success=True)
-            
-            # Turn 1: Create ticket
-            turn1_messages = [
-                {"role": "user", "content": "I want to raise a ticket about my monitor not turning on."},
-                {"role": "assistant", "content": "Ticket created: TKT-12345"}
-            ]
-            
-            for msg in turn1_messages:
-                mock_store(session_id=session_id, message=msg)
-            
-            # Turn 2: Update same ticket
-            turn2_message = {
-                "role": "user",
-                "content": "Actually make that high priority, my presentation is in an hour."
-            }
-            
-            with patch('app.services.ticket_service.update_ticket_status') as mock_update:
-                mock_update.return_value = MagicMock(
-                    id="TKT-12345",
-                    priority="high"
-                )
-                
-                result = mock_update()
-                
-                # Should update TKT-12345, not create new ticket
-                assert result.id == "TKT-12345"
-                assert result.priority == "high"
-            
-            # Turn 3: Recall ticket from memory
-            with patch('app.services.chat_service.get_session_context') as mock_context:
-                mock_context.return_value = {
-                    "current_ticket_id": "TKT-12345",
-                    "current_ticket_priority": "high"
-                }
-                
-                context = mock_context()
-                assert context["current_ticket_id"] == "TKT-12345"
-                assert context["current_ticket_priority"] == "high"
+        conversation_memory.append_turn(
+            session_id,
+            MemoryTurn(
+                user_message="I want to raise a ticket about my monitor not turning on.",
+                assistant_message="Ticket created: TKT-12345",
+                intent="create_ticket",
+            ),
+        )
+        conversation_memory.set_last_entities(session_id, {"current_ticket_id": "TKT-12345"})
+
+        conversation_memory.append_turn(
+            session_id,
+            MemoryTurn(
+                user_message="Actually make that high priority, my presentation is in an hour.",
+                assistant_message="Ticket TKT-12345 priority updated to high.",
+                intent="update_ticket",
+            ),
+        )
+        conversation_memory.set_last_entities(
+            session_id,
+            {"current_ticket_id": "TKT-12345", "current_ticket_priority": "high"},
+        )
+
+        turns = conversation_memory.get_recent_turns(session_id)
+        context = conversation_memory.get_last_entities(session_id)
+        assert len(turns) == 2
+        assert turns[0].assistant_message == "Ticket created: TKT-12345"
+        assert turns[1].intent == "update_ticket"
+        assert context["current_ticket_id"] == "TKT-12345"
+        assert context["current_ticket_priority"] == "high"
