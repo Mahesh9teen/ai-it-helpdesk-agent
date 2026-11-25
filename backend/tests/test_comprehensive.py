@@ -163,51 +163,39 @@ class TestRAGGrounding:
     @pytest.mark.parametrize("question,description", IN_SCOPE_QUESTIONS)
     def test_rag_grounding_in_scope(self, question, description):
         """Test that in-scope questions return grounded answers with citations."""
-        with patch('app.rag.retriever.retrieve_context') as mock_retrieve:
-            mock_retrieve.return_value = {
-                'context': 'Remote work is allowed 3 days per week',
-                'sources': ['HR_Policy_2024.pdf', 'Remote_Work_Guidelines.md']
-            }
-            
-            with patch('app.agent.orchestrator.orchestrator') as mock_orchestrator:
-                mock_result = MagicMock()
-                mock_result.response = "Remote work is allowed 3 days per week (source: HR_Policy_2024.pdf)"
-                mock_result.has_source_citation = True
-                mock_orchestrator.process_message.return_value = mock_result
-                
-                result = mock_orchestrator.process_message(
-                    session_id="test_session",
-                    message=question,
-                    employee_id="test_employee"
-                )
-                
-                assert result.has_source_citation
-                assert "source:" in result.response.lower()
-    
+        with patch('app.agent.orchestrator.orchestrator') as mock_orchestrator:
+            mock_result = MagicMock()
+            mock_result.response = "Remote work is allowed 3 days per week (source: HR_Policy_2024.pdf)"
+            mock_result.has_source_citation = True
+            mock_orchestrator.process_message.return_value = mock_result
+
+            result = mock_orchestrator.process_message(
+                session_id="test_session",
+                message=question,
+                employee_id="test_employee"
+            )
+
+            assert result.has_source_citation
+            assert "source:" in result.response.lower()
+
     @pytest.mark.parametrize("question,description", OUT_OF_SCOPE_QUESTIONS)
     def test_rag_grounding_out_of_scope(self, question, description):
         """Test that out-of-scope questions trigger refusal."""
-        with patch('app.rag.retriever.retrieve_context') as mock_retrieve:
-            mock_retrieve.return_value = {
-                'context': None,
-                'sources': []
-            }
-            
-            with patch('app.agent.orchestrator.orchestrator') as mock_orchestrator:
-                mock_result = MagicMock()
-                mock_result.response = "I don't have information about that in the knowledge base. Please contact HR or IT for help."
-                mock_result.has_source_citation = False
-                mock_orchestrator.process_message.return_value = mock_result
-                
-                result = mock_orchestrator.process_message(
-                    session_id="test_session",
-                    message=question,
-                    employee_id="test_employee"
-                )
-                
-                # Should NOT confidently answer or cite sources
-                assert not result.has_source_citation
-                assert "don't have" in result.response.lower() or "not in knowledge base" in result.response.lower()
+        with patch('app.agent.orchestrator.orchestrator') as mock_orchestrator:
+            mock_result = MagicMock()
+            mock_result.response = "I don't have information about that in the knowledge base. Please contact HR or IT for help."
+            mock_result.has_source_citation = False
+            mock_orchestrator.process_message.return_value = mock_result
+
+            result = mock_orchestrator.process_message(
+                session_id="test_session",
+                message=question,
+                employee_id="test_employee"
+            )
+
+            # Should NOT confidently answer or cite sources
+            assert not result.has_source_citation
+            assert "don't have" in result.response.lower() or "not in knowledge base" in result.response.lower()
 
 
 # ============================================================================
