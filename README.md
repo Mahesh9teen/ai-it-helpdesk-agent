@@ -9,6 +9,8 @@ ai-it-helpdesk-agent/
 ├── backend/
 ├── frontend/
 ├── docs/
+├── agensi-helpdesk-skill/
+│   └── SKILL.md
 ├── .github/workflows/ci.yml
 ├── docker-compose.yml
 ├── Makefile
@@ -21,6 +23,21 @@ ai-it-helpdesk-agent/
 - Frontend Vite app shell with chat and ticketing components.
 - Ollama, PostgreSQL, backend, and frontend services in Docker Compose.
 - API documentation placeholders and a Hoppscotch collection file.
+
+## Agensi Marketplace Skill
+
+This repository includes an optional, standalone AI-agent skill at [`agensi-helpdesk-skill/SKILL.md`](agensi-helpdesk-skill/SKILL.md). It guides an agent through safe, reversible IT troubleshooting and drafting support tickets from details provided by the user.
+
+The skill is guidance only: it does not connect to this app, inspect devices or accounts, query a company knowledge base, or create or submit tickets. Do not list integrations or permissions on Agensi unless you have separately configured and verified them.
+
+To package the skill for Agensi, run from the repository root:
+
+```bash
+cd agensi-helpdesk-skill
+zip -j ../agensi-ai-it-helpdesk-triage.zip SKILL.md
+```
+
+Upload `agensi-ai-it-helpdesk-triage.zip` on the Agensi skill submission page. The archive contains `SKILL.md` at its root.
 
 ## Local setup
 
@@ -109,12 +126,3 @@ The backend now includes a working Ollama + FAISS retrieval pipeline:
 - Chunks are indexed with metadata including source filename, category, and last-updated date, then persisted to `backend/data/faiss_index`.
 - On service startup, the FAISS index is loaded once and exposed via a metadata-filterable retriever.
 - RAG responses are grounded to retrieved context and escalate with a fixed fallback response when context is insufficient.
-# My Project
-
-This is my project description.
-
-## Features
-- Feature 1
-- Feature 2
-
-Off Campus Verification Code: PU5S57
